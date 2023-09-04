@@ -99,28 +99,28 @@ net_sf = net_sfn |>
   dplyr::mutate(from, to, TRAVEL_COST = units::drop_units(sfnetworks::edge_length())) |> 
   sf::st_as_sf() |> 
   dplyr::select(from, to, TRAVEL_COST)
+plot(net_sf)
 ```
+
+![](README_files/figure-commonmark/unnamed-chunk-8-1.png)
+
+We’ll start by calculating routes from the first `voronoi_hex_boundary`
+cell to the nearest point.
+
+    [[1]]
+     [1] 1548 1549 1550 1551  670 1565 1558 1564 1563 1559 1529 1528 1570 1569   82
+    [16] 1637 1638  236  802   67
+
+![](README_files/figure-commonmark/unnamed-chunk-9-1.png)
 
 # Routing with cppRouting
 
 ``` r
-plot(net_sf)
-```
-
-![](README_files/figure-commonmark/single-path-1.png)
-
-``` r
-from_sf = lwgeom::st_startpoint(net_sf)
-to_sf = from_sf = lwgeom::st_endpoint(net_sf)
 net_df = net_sf |> 
   sf::st_drop_geometry()
 graph = cppRouting::makegraph(net_df)
-from = voronoi_hex_boundary[1, ] |> st_centroid() |> st_geometry()
-to_nearest = nngeo::st_nn(from, points, k = 3, progress = FALSE)
-to = points[to_nearest[[1]], ] |> st_geometry()
-from_graph = nngeo::st_nn(from, from_sf, k = 1, progress = FALSE)[[1]]
-to_graph = nngeo::st_nn(to, to_sf, k = 1, progress = FALSE)[[1]]
 
+#| label: single-path
 head(graph$data)
 ```
 

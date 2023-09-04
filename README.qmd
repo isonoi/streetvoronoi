@@ -156,24 +156,41 @@ net_sf = net_sfn |>
   dplyr::mutate(from, to, TRAVEL_COST = units::drop_units(sfnetworks::edge_length())) |> 
   sf::st_as_sf() |> 
   dplyr::select(from, to, TRAVEL_COST)
+plot(net_sf)
+```
+
+We'll start by calculating routes from the first `voronoi_hex_boundary` cell to the nearest point.
+
+```{r}
+from = voronoi_hex_boundary[1, ] |> st_centroid() |> st_geometry()
+to_nearest = nngeo::st_nn(from, points, k = 3, progress = FALSE)
+to = points[to_nearest[[1]], ] |> st_geometry()
+from_sf = lwgeom::st_startpoint(net_sf)
+to_sf = from_sf = lwgeom::st_endpoint(net_sf)
+from_graph = nngeo::st_nn(from, from_sf, k = 1, progress = FALSE)[[1]]
+to_graph = nngeo::st_nn(to, to_sf, k = 1, progress = FALSE)[[1]]
+path = sfnetworks::st_network_paths(net_sfn, from_graph, to_graph)
+path$edge_paths
+path_sf = net_sfn |> 
+  sfnetworks::activate("edges") |> 
+  slice(path$edge_paths[[1]]) |>
+  sf::st_as_sf()
+tm_shape(voronoi_hex, bb = st_bbox(voronoi)) + tm_polygons(col = "name") +
+  tm_shape(voronoi_hex_boundary) + tm_fill(col = "grey", alpha = 0.8) +
+  tm_shape(points) + tm_dots(col = "red", size = 0.8) +
+  tm_shape(voronoi) + tm_borders(col = "blue", lwd = 5) +
+  tm_shape(path_sf) + tm_lines() +
+  tm_layout(legend.outside = TRUE)
 ```
 
 # Routing with cppRouting
 
 ```{r, echo=TRUE}
-#| label: single-path
-plot(net_sf)
-from_sf = lwgeom::st_startpoint(net_sf)
-to_sf = from_sf = lwgeom::st_endpoint(net_sf)
 net_df = net_sf |> 
   sf::st_drop_geometry()
 graph = cppRouting::makegraph(net_df)
-from = voronoi_hex_boundary[1, ] |> st_centroid() |> st_geometry()
-to_nearest = nngeo::st_nn(from, points, k = 3, progress = FALSE)
-to = points[to_nearest[[1]], ] |> st_geometry()
-from_graph = nngeo::st_nn(from, from_sf, k = 1, progress = FALSE)[[1]]
-to_graph = nngeo::st_nn(to, to_sf, k = 1, progress = FALSE)[[1]]
 
+#| label: single-path
 head(graph$data)
 head(graph$dict)
 str(graph)
