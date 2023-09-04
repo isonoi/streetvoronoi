@@ -127,9 +127,18 @@ tm_shape(voronoi_hex, bb = st_bbox(oldenburg_voronoi)) + tm_polygons(col = "name
   tm_layout(legend.outside = TRUE)
 ```
 
-Next, we'll use travel times to find the nearest pub:
+Next, we'll use travel times to find the nearest pub.
+To minimise the number of requests, the strategy will be as follows:
+
+1. Identify hex cells that touch the boundary between two or more territories
 
 ```{r}
-# TODO!
+inner_lines = rmapshaper::ms_innerlines(voronoi_hex)
+voronoi_hex_boundary = hex_joined[inner_lines, ]
+tm_shape(voronoi_hex, bb = st_bbox(oldenburg_voronoi)) + tm_polygons(col = "name") +
+  tm_shape(voronoi_hex_boundary) + tm_fill(col = "grey", alpha = 0.8) +
+  tm_shape(oldenburg_pubs) + tm_dots(col = "red", size = 0.8) +
+  tm_shape(oldenburg_voronoi) + tm_borders(col = "blue", lwd = 5) +
+  tm_layout(legend.outside = TRUE)
 ```
 

@@ -67,4 +67,9 @@ nearest distances:
 
 ![](README_files/figure-commonmark/unnamed-chunk-6-1.png)
 
-Next, we’ll use travel times to find the nearest pub:
+Next, we’ll use travel times to find the nearest pub. To minimise the
+number of requests, the strategy will be as follows:
+
+1.  Identify hex cells that touch the boundary between two
+
+![](README_files/figure-commonmark/unnamed-chunk-7-1.png)
