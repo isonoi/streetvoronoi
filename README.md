@@ -33,3 +33,27 @@ The input datasets for the example data are as follows:
     4     4      6      8 (((8.208305 53.15138, 8.208114 53.15127, 8.207479 53.1509…
 
 ![](README_files/figure-commonmark/unnamed-chunk-4-1.png)
+
+# Next steps with isochrone polygon intersection approach
+
+The example above demonstrates the calculation of voronoi polygons and
+isochrone polygons associated with points. To get from this example to
+catchment areas associated with travel times, building on the approach
+of calculating multiple isochrones, a number of problems need to be
+solved:
+
+- Iterative union of isochrone polygons associated with each point for
+  which there are no ‘collissions’
+- In cases where there are ‘collisions’ between isochrone polygons,
+  erase polygons with larger travel times with polygons associated with
+  a different point that have lower travel times
+- Where isochrone polygons of equal travel time intersect, find the
+  centreline of the intersection and partition polygons according, as
+  outlined
+  [here](https://gis.stackexchange.com/questions/217151/how-to-align-edges-of-overlapping-polygons-in-the-middle-line)
+
+# Alternative approaches
+
+Another approach would be to iteratively sample points located between
+points to find locations that have roughly equal travel times. From
+these ‘equal travel time points’ polygons can be constructed.
