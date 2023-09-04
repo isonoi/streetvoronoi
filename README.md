@@ -70,6 +70,7 @@ nearest distances:
 Next, we’ll use travel times to find the nearest pub. To minimise the
 number of requests, the strategy will be as follows:
 
-1.  Identify hex cells that touch the boundary between two
+1.  Identify hex cells that touch the boundary between two or more
+    territories
 
 ![](README_files/figure-commonmark/unnamed-chunk-7-1.png)
