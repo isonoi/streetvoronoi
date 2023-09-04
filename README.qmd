@@ -94,3 +94,7 @@ To get from this example to catchment areas associated with travel times, buildi
 
 Another approach would be to iteratively sample points located between points to find locations that have roughly equal travel times.
 From these 'equal travel time points' polygons can be constructed.
+
+# Nearest hex cells
+
+
