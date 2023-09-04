@@ -57,3 +57,14 @@ solved:
 Another approach would be to iteratively sample points located between
 points to find locations that have roughly equal travel times. From
 these ‘equal travel time points’ polygons can be constructed.
+
+# Nearest hex cells
+
+![](README_files/figure-commonmark/unnamed-chunk-5-1.png)
+
+We’ll iterate over every hex cell to find the nearest pub, first using
+nearest distances:
+
+![](README_files/figure-commonmark/unnamed-chunk-6-1.png)
+
+Next, we’ll use travel times to find the nearest pub:
