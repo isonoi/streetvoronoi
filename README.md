@@ -68,9 +68,74 @@ nearest distances:
 ![](README_files/figure-commonmark/unnamed-chunk-6-1.png)
 
 Next, we’ll use travel times to find the nearest pub. To minimise the
-number of requests, the strategy will be as follows:
+number of requests, the strategy will be as follows: we will identify
+hex cells that touch the boundary between two or more territories.
 
-1.  Identify hex cells that touch the boundary between two or more
-    territories
+``` r
+inner_lines = rmapshaper::ms_innerlines(voronoi_hex)
+voronoi_hex_boundary = hex_joined[inner_lines, ]
+tm_shape(voronoi_hex, bb = st_bbox(voronoi)) + tm_polygons(col = "name") +
+  tm_shape(voronoi_hex_boundary) + tm_fill(col = "grey", alpha = 0.8) +
+  tm_shape(points) + tm_dots(col = "red", size = 0.8) +
+  tm_shape(voronoi) + tm_borders(col = "blue", lwd = 5) +
+  tm_layout(legend.outside = TRUE)
+```
 
 ![](README_files/figure-commonmark/unnamed-chunk-7-1.png)
+
+We’ll prepare the OSM network for routing.
+
+# Routing with sfnetworks
+
+``` r
+net_linestrings = sf::st_cast(walking_network, "LINESTRING")
+net_groups = stplanr::rnet_group(net_linestrings)
+largest_group = table(net_groups) |> which.max()
+net_clean = net_linestrings[net_groups == largest_group, ]
+net_sfn = sfnetworks::as_sfnetwork(net_clean, directed = FALSE)
+net_igraph = igraph::as.igraph(net_sfn)
+net_sf = net_sfn |> 
+  sfnetworks::activate("edges") |> 
+  dplyr::mutate(from, to, TRAVEL_COST = units::drop_units(sfnetworks::edge_length())) |> 
+  sf::st_as_sf() |> 
+  dplyr::select(from, to, TRAVEL_COST)
+```
+
+# Routing with cppRouting
+
+![](README_files/figure-commonmark/single-path-1.png)
+
+      from  to      dist
+    1    0  76  63.02741
+    2    1 364 383.60190
+    3    2  85  14.04821
+    4    3 710  18.22150
+    5    4  34  27.57053
+    6    5 712  67.35609
+
+      ref id
+    1   1  0
+    2   3  1
+    3   5  2
+    4   7  3
+    5   9  4
+    6  11  5
+
+    List of 5
+     $ data  :'data.frame': 1695 obs. of  3 variables:
+      ..$ from: int [1:1695] 0 1 2 3 4 5 6 7 8 9 ...
+      ..$ to  : int [1:1695] 76 364 85 710 34 712 1206 925 253 1265 ...
+      ..$ dist: num [1:1695] 63 383.6 14 18.2 27.6 ...
+     $ coords: NULL
+     $ nbnode: int 2190
+     $ dict  :'data.frame': 2190 obs. of  2 variables:
+      ..$ ref: chr [1:2190] "1" "3" "5" "7" ...
+      ..$ id : int [1:2190] 0 1 2 3 4 5 6 7 8 9 ...
+     $ attrib:List of 4
+      ..$ aux  : NULL
+      ..$ cap  : NULL
+      ..$ alpha: NULL
+      ..$ beta : NULL
+
+    List of 1
+     $ 1244_113: chr(0) 

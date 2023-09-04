@@ -128,11 +128,9 @@ tm_shape(voronoi_hex, bb = st_bbox(voronoi)) + tm_polygons(col = "name") +
 ```
 
 Next, we'll use travel times to find the nearest pub.
-To minimise the number of requests, the strategy will be as follows:
+To minimise the number of requests, the strategy will be as follows: we will identify hex cells that touch the boundary between two or more territories.
 
-1. Identify hex cells that touch the boundary between two or more territories
-
-```{r}
+```{r, echo=TRUE}
 inner_lines = rmapshaper::ms_innerlines(voronoi_hex)
 voronoi_hex_boundary = hex_joined[inner_lines, ]
 tm_shape(voronoi_hex, bb = st_bbox(voronoi)) + tm_polygons(col = "name") +
@@ -142,3 +140,46 @@ tm_shape(voronoi_hex, bb = st_bbox(voronoi)) + tm_polygons(col = "name") +
   tm_layout(legend.outside = TRUE)
 ```
 
+We'll prepare the OSM network for routing.
+
+# Routing with sfnetworks
+
+```{r, echo=TRUE}
+net_linestrings = sf::st_cast(walking_network, "LINESTRING")
+net_groups = stplanr::rnet_group(net_linestrings)
+largest_group = table(net_groups) |> which.max()
+net_clean = net_linestrings[net_groups == largest_group, ]
+net_sfn = sfnetworks::as_sfnetwork(net_clean, directed = FALSE)
+net_igraph = igraph::as.igraph(net_sfn)
+net_sf = net_sfn |> 
+  sfnetworks::activate("edges") |> 
+  dplyr::mutate(from, to, TRAVEL_COST = units::drop_units(sfnetworks::edge_length())) |> 
+  sf::st_as_sf() |> 
+  dplyr::select(from, to, TRAVEL_COST)
+```
+
+# Routing with cppRouting
+
+```{r}
+#| label: single-path
+plot(net_sf)
+from_sf = lwgeom::st_startpoint(net_sf)
+to_sf = from_sf = lwgeom::st_endpoint(net_sf)
+net_df = net_sf |> 
+  sf::st_drop_geometry()
+graph = cppRouting::makegraph(net_df)
+from = voronoi_hex_boundary[1, ] |> st_centroid() |> st_geometry()
+to_nearest = nngeo::st_nn(from, points, k = 3, progress = FALSE)
+to = points[to_nearest[[1]], ] |> st_geometry()
+from_graph = nngeo::st_nn(from, from_sf, k = 1, progress = FALSE)[[1]]
+to_graph = nngeo::st_nn(to, to_sf, k = 1, progress = FALSE)[[1]]
+
+head(graph$data)
+head(graph$dict)
+str(graph)
+# calculate routes with cppRouting
+
+# cppRouting::get_path_pair(graph, from[rep(1, nrow(to))], to)
+route_cpp = cppRouting::get_path_pair(graph, from_graph, to_graph)
+str(route_cpp)
+```
