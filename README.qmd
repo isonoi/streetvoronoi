@@ -160,7 +160,7 @@ net_sf = net_sfn |>
 
 # Routing with cppRouting
 
-```{r}
+```{r, echo=TRUE}
 #| label: single-path
 plot(net_sf)
 from_sf = lwgeom::st_startpoint(net_sf)

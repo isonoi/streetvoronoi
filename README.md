@@ -103,7 +103,26 @@ net_sf = net_sfn |>
 
 # Routing with cppRouting
 
+``` r
+plot(net_sf)
+```
+
 ![](README_files/figure-commonmark/single-path-1.png)
+
+``` r
+from_sf = lwgeom::st_startpoint(net_sf)
+to_sf = from_sf = lwgeom::st_endpoint(net_sf)
+net_df = net_sf |> 
+  sf::st_drop_geometry()
+graph = cppRouting::makegraph(net_df)
+from = voronoi_hex_boundary[1, ] |> st_centroid() |> st_geometry()
+to_nearest = nngeo::st_nn(from, points, k = 3, progress = FALSE)
+to = points[to_nearest[[1]], ] |> st_geometry()
+from_graph = nngeo::st_nn(from, from_sf, k = 1, progress = FALSE)[[1]]
+to_graph = nngeo::st_nn(to, to_sf, k = 1, progress = FALSE)[[1]]
+
+head(graph$data)
+```
 
       from  to      dist
     1    0  76  63.02741
@@ -113,6 +132,10 @@ net_sf = net_sfn |>
     5    4  34  27.57053
     6    5 712  67.35609
 
+``` r
+head(graph$dict)
+```
+
       ref id
     1   1  0
     2   3  1
@@ -120,6 +143,10 @@ net_sf = net_sfn |>
     4   7  3
     5   9  4
     6  11  5
+
+``` r
+str(graph)
+```
 
     List of 5
      $ data  :'data.frame': 1695 obs. of  3 variables:
@@ -136,6 +163,14 @@ net_sf = net_sfn |>
       ..$ cap  : NULL
       ..$ alpha: NULL
       ..$ beta : NULL
+
+``` r
+# calculate routes with cppRouting
+
+# cppRouting::get_path_pair(graph, from[rep(1, nrow(to))], to)
+route_cpp = cppRouting::get_path_pair(graph, from_graph, to_graph)
+str(route_cpp)
+```
 
     List of 1
      $ 1244_113: chr(0) 
