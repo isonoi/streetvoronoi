@@ -1,0 +1,104 @@
+---
+format: gfm
+title: "Voronoiesque polygons based on travel times isochrones"
+warning: false
+echo: false
+---
+
+# Pre-requisites
+
+The code underlying this paper requires R to be installed.
+
+```{r}
+#| label: setup
+# #| include: false
+library(sf)
+library(osmextract)
+library(dplyr)
+library(tmap)
+```
+
+# Input data
+
+The input datasets for the example data are as follows:
+
+- Street network in a 1 km buffer around central Oldenburg
+- 4 pubs in Oldenburg
+
+```{r}
+#| label: extract-osm-data
+oldenburg_centroid = osmextract:::oe_search("Oldenburg, Germany")
+oldenburg_poly = zonebuilder::zb_zone(oldenburg_centroid, n_circles = 1)
+# mapview::mapview(oldenburg_poly)
+# oldenburg_walking_network = oe_get_network(oldenburg_poly, "walking", boundary = oldenburg_poly, boundary_type = "clipsrc")
+# plot(oldenburg_walking_network$geometry)
+# sf::write_sf(oldenburg_walking_network, "oldenburg_walking_network.geojson")
+oldenburg_walking_network = sf::read_sf("oldenburg_walking_network.geojson")
+# oldenburg_pubs = oe_get(oldenburg_poly, extra_tags = c("amenity"), query = "SELECT * FROM points WHERE amenity = 'pub'", boundary = oldenburg_poly, boundary_type = "clipsrc")
+# oldenburg_pubs = oldenburg_pubs |>
+#   select(name, osm_id)
+# mapview::mapview(oldenburg_pubs)
+# oldenburg_pubs = oldenburg_pubs |>
+#   filter(stringr::str_detect(name, "Ben|Gast|AU|Kar"))
+# sf::write_sf(oldenburg_pubs, "oldenburg_pubs.geojson", delete_dsn = TRUE)
+oldenburg_pubs = sf::read_sf("oldenburg_pubs.geojson")
+tm_shape(oldenburg_walking_network) + tm_lines() + tm_shape(oldenburg_pubs) + tm_dots(col = "red", size = 5)
+```
+
+# Voronoi polygons
+
+```{r}
+#| label: voronois
+oldenburg_voronoi = stplanr::geo_projected(oldenburg_pubs, sf::st_voronoi) # fails
+# crsuggest::suggest_crs(oldenburg_pubs)
+# 5652
+local_crs = "EPSG:5652"
+oldenburg_pubs_projected = st_transform(oldenburg_pubs, local_crs)
+oldenburg_poly_projected = st_transform(oldenburg_poly, local_crs)
+oldenburg_voronoi_projected = st_voronoi(st_union(oldenburg_pubs_projected), oldenburg_poly_projected$geometry)
+oldenburg_voronoi_projected_polygons = st_collection_extract(oldenburg_voronoi_projected, type = "POLYGON")
+oldenburg_voronoi = st_transform(oldenburg_voronoi_projected_polygons, "EPSG:4326")
+oldenburg_voronoi = sf::st_join(st_as_sf(oldenburg_voronoi), oldenburg_pubs |> select(osm_id))
+oldenburg_voronoi = left_join(st_drop_geometry(oldenburg_pubs), oldenburg_voronoi) |> 
+  st_as_sf()
+tm_shape(oldenburg_voronoi) + tm_polygons() + tm_shape(oldenburg_pubs) + tm_dots(col = "red", size = 0.8)
+```
+
+# Isochrones
+
+```{r}
+# osrm_iso = osrm::osrmIsochrone(loc = oldenburg_pubs[2, ], breaks = c(2, 4, 6, 8), osrm.profile = "foot")
+# sf::write_sf(osrm_iso, "osrm_iso_1.geojson", delete_dsn = TRUE)
+osrm_iso = read_sf("osrm_iso_1.geojson")
+osrm_iso
+tmap_options(check.and.fix = TRUE)
+tm_shape(oldenburg_voronoi) +
+  tm_borders(lwd = 5) +
+  tm_shape(osrm_iso) +
+  tm_polygons(col = "isomax", alpha = 0.3) +
+  tm_shape(oldenburg_pubs) +
+  tm_dots()
+
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+
+```{r}
+```
+
+
+```{r}
+```
