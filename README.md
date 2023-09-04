@@ -9,7 +9,7 @@ The code underlying this paper requires R to be installed.
 The input datasets for the example data are as follows:
 
 - Street network in a 1 km buffer around central Oldenburg
-- 4 pubs in Oldenburg
+- 4 points in Oldenburg
 
 ![](README_files/figure-commonmark/extract-osm-data-1.png)
 
@@ -57,3 +57,20 @@ solved:
 Another approach would be to iteratively sample points located between
 points to find locations that have roughly equal travel times. From
 these ‘equal travel time points’ polygons can be constructed.
+
+# Nearest hex cells
+
+![](README_files/figure-commonmark/unnamed-chunk-5-1.png)
+
+We’ll iterate over every hex cell to find the nearest pub, first using
+nearest distances:
+
+![](README_files/figure-commonmark/unnamed-chunk-6-1.png)
+
+Next, we’ll use travel times to find the nearest pub. To minimise the
+number of requests, the strategy will be as follows:
+
+1.  Identify hex cells that touch the boundary between two or more
+    territories
+
+![](README_files/figure-commonmark/unnamed-chunk-7-1.png)
