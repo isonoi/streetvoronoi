@@ -108,12 +108,15 @@ ggplot()+
 ## Get Neighbor dist/dura ----------------------------------------------------
 nb_contiguity <- st_touches(hex_grid)
 
+t0 <- Sys.time()
 nb_durations <- lapply(1:length(nb_contiguity), function(n) {
   dura <- osrmTable(src = hex_points[n,],
                     dst = hex_points[nb_contiguity[[n]], ],
                     osrm.server = "http://0.0.0.0:5000/")
   return(dura$durations)
 })
+t1 <- Sys.time()
+print(t1 - t0)
 
 # Convert to graph, make isochrones -----------------------------------------
 db <- mclapply(1:nrow(hex_grid), nb, mc.cores = cores) %>%
