@@ -9,7 +9,7 @@ The code underlying this paper requires R to be installed.
 The input datasets for the example data are as follows:
 
 - Street network in a 1 km buffer around central Oldenburg
-- 4 pubs in Oldenburg
+- 4 points in Oldenburg
 
 ![](README_files/figure-commonmark/extract-osm-data-1.png)
 
