@@ -49,7 +49,7 @@ tm_shape(walking_network) + tm_lines() + tm_shape(points) + tm_dots(col = "red",
 
 ```{r}
 #| label: voronois
-voronoi = stplanr::geo_projected(points, sf::st_voronoi) # fails
+# voronoi = stplanr::geo_projected(points, sf::st_voronoi) # fails
 # crsuggest::suggest_crs(points)
 # 5652
 local_crs = "EPSG:5652"
@@ -61,6 +61,7 @@ voronoi = st_transform(voronoi_projected_polygons, "EPSG:4326")
 voronoi = sf::st_join(st_as_sf(voronoi), points |> select(osm_id))
 voronoi = left_join(st_drop_geometry(points), voronoi) |> 
   st_as_sf()
+voronoi = st_intersection(voronoi, poly)
 tm_shape(voronoi) + tm_polygons() + tm_shape(points) + tm_dots(col = "red", size = 0.8)
 ```
 
@@ -104,6 +105,7 @@ hex_grid = stplanr::geo_projected(
   cellsize = 200,
   square = FALSE
 )
+hex_grid = hex_grid[poly]
 tm_shape(hex_grid) + tm_polygons() +
   tm_shape(points) + tm_dots(col = "red", size = 0.8)
 ```
@@ -118,6 +120,7 @@ hex_joined = st_sf(
   st_drop_geometry(nearest_points),
   geometry = hex_grid
 )
+hex_joined_centroids = st_centroid(hex_joined)
 voronoi_hex = hex_joined |>
   group_by(name) |>
   summarise(n = n())
@@ -144,59 +147,179 @@ We'll prepare the OSM network for routing.
 
 # Routing with sfnetworks
 
+We'll start by demonstrating how the package works with the sample dataset.
+
+```{r}
+library(sfnetworks)
+roxel
+net = as_sfnetwork(roxel, directed = FALSE) |>
+  activate("edges") |>
+  mutate(weight = edge_length())
+study_area = st_convex_hull(roxel)
+set.seed(2023)
+rpoints = st_sample(study_area, 10)
+tm_shape(roxel) + tm_lines() +
+  tm_shape(rpoints) + tm_dots(col = "red", size = 0.8)
+```
+
+We'll calculate the route from point 1 to point 2:
+
+```{r}
+path_1_2 = st_network_paths(net, rpoints[1], rpoints[2], weights = "weight")
+path_1_2_sf = net |> 
+  activate("edges") |> 
+  slice(path_1_2$edge_paths[[1]]) |>
+  sf::st_as_sf()
+tm_shape(roxel) + tm_lines() +
+  tm_shape(rpoints[1:2]) + tm_dots(col = "red", size = 0.8) +
+  tm_shape(path_1_2_sf) + tm_lines(lwd = 5, col = "blue")
+```
+
+```{r}
+#| echo: false
+#| eval: false
+#| label: with-nodes-on-network
+net_nodes = net |> 
+  activate("nodes") |>
+  st_as_sf()
+from_graph = nngeo::st_nn(
+  rpoints[1],
+  net_nodes, k = 1,
+  progress = FALSE
+)[[1]]
+to_graph = nngeo::st_nn(
+  rpoints[2],
+  net_nodes, k = 1,
+  progress = FALSE
+)[[1]]
+path_1_2 = st_network_paths(net, from_graph, to_graph)
+path_1_2_sf = net |> 
+  activate("edges") |> 
+  slice(path_1_2$edge_paths[[1]]) |>
+  sf::st_as_sf()
+tm_shape(roxel) + tm_lines() +
+  tm_shape(rpoints[1:2]) + tm_dots(col = "red", size = 0.8) +
+  tm_shape(path_1_2_sf) + tm_lines(lwd = 5, col = "blue")
+```
+
+We can calculate many routes as follows:
+
+```{r}
+net_nodes = net |> 
+  activate("nodes") |>
+  st_as_sf()
+point_ids = nngeo::st_nn(
+  rpoints,
+  net_nodes, k = 1,
+  progress = FALSE
+) |> unlist()
+point_df = data.frame(
+  from = rep(point_ids, each = length(point_ids)),
+  to = rep(point_ids, length(point_ids))
+) |>
+  filter(from != to)
+
+paths_all = st_network_paths(
+  net,
+  from = point_df$from,
+  to = point_df$to,
+  weights = "weight"
+)
+class(paths_all)
+routes_list = lapply(seq(nrow(paths_all)), function(i) {
+  net |> 
+    activate("edges") |> 
+    slice(paths_all$edge_paths[[i]]) |>
+    mutate(route_number = i) |>
+    sf::st_as_sf()
+})
+routes_list[[1]]
+routes_sf = do.call(rbind, routes_list)
+tm_shape(roxel) + tm_lines() +
+  tm_shape(rpoints) + tm_dots(col = "red", size = 0.8) +
+  tm_shape(routes_sf) + tm_lines(lwd = 5, col = "blue", alpha = 0.05)
+```
+
+We can calculate the amount of travel on each link as follows:
+
+```{r}
+routes_sf$n = 1
+rnet = stplanr::overline(routes_sf, "n")
+tm_shape(rnet) + tm_lines(lwd = "n", scale = 9)
+```
+
 ```{r, echo=TRUE}
 net_linestrings = sf::st_cast(walking_network, "LINESTRING")
-net_groups = stplanr::rnet_group(net_linestrings)
-largest_group = table(net_groups) |> which.max()
-net_clean = net_linestrings[net_groups == largest_group, ]
-net_sfn = sfnetworks::as_sfnetwork(net_clean, directed = FALSE)
-net_igraph = igraph::as.igraph(net_sfn)
-net_sf = net_sfn |> 
+net = sfnetworks::as_sfnetwork(net_linestrings, directed = FALSE)
+library(tidygraph)
+with_graph(net, graph_component_count())
+net = net |>
+  activate("edges") |>
+  mutate(weight = edge_length()) |>
+  activate("nodes") |>
+  filter(group_components() == 1)
+with_graph(net, graph_component_count())
+
+net_sf = net |> 
   sfnetworks::activate("edges") |> 
-  dplyr::mutate(from, to, TRAVEL_COST = units::drop_units(sfnetworks::edge_length())) |> 
   sf::st_as_sf() |> 
-  dplyr::select(from, to, TRAVEL_COST)
-plot(net_sf)
+  dplyr::select(from, to, weight)
+nrow(net_sf)
+nrow(walking_network)
+tm_shape(walking_network) + tm_lines("grey", lwd = 5) +
+  tm_shape(net_sf) + tm_lines("blue", lwd = 2) 
 ```
 
 We'll start by calculating routes from the first `voronoi_hex_boundary` cell to the nearest point.
 
 ```{r}
-from = voronoi_hex_boundary[1, ] |> st_centroid() |> st_geometry()
-to_nearest = nngeo::st_nn(from, points, k = 3, progress = FALSE)
-to = points[to_nearest[[1]], ] |> st_geometry()
-from_sf = lwgeom::st_startpoint(net_sf)
-to_sf = from_sf = lwgeom::st_endpoint(net_sf)
-from_graph = nngeo::st_nn(from, from_sf, k = 1, progress = FALSE)[[1]]
-to_graph = nngeo::st_nn(to, to_sf, k = 1, progress = FALSE)[[1]]
-path = sfnetworks::st_network_paths(net_sfn, from_graph, to_graph)
-path$edge_paths
-path_sf = net_sfn |> 
-  sfnetworks::activate("edges") |> 
+net_nodes = net |> 
+  activate("nodes") |>
+  st_as_sf()
+from_point = hex_joined_centroids[1, ]
+to_point = points[1, ]
+path = sfnetworks::st_network_paths(net, from_point, to_point)
+path_sf = net |> 
+  activate("edges") |> 
   slice(path$edge_paths[[1]]) |>
   sf::st_as_sf()
+
 tm_shape(voronoi_hex, bb = st_bbox(voronoi)) + tm_polygons(col = "name") +
+  tm_shape(hex_joined[1, ]) + tm_fill(col = "black") +
   tm_shape(voronoi_hex_boundary) + tm_fill(col = "grey", alpha = 0.8) +
   tm_shape(points) + tm_dots(col = "red", size = 0.8) +
   tm_shape(voronoi) + tm_borders(col = "blue", lwd = 5) +
-  tm_shape(path_sf) + tm_lines() +
+  tm_shape(path_sf) + tm_lines()
   tm_layout(legend.outside = TRUE)
 ```
 
 # Routing with cppRouting
 
-```{r, echo=TRUE}
+```{r}
+#| eval: false
 net_df = net_sf |> 
   sf::st_drop_geometry()
 graph = cppRouting::makegraph(net_df)
+names(graph)
+names(graph$data)
+summary(graph$data$dist)
 
 #| label: single-path
 head(graph$data)
 head(graph$dict)
 str(graph)
-# calculate routes with cppRouting
-
+# calculate route from A to B with cppRouting
+from_graph = nngeo::st_nn(
+  hex_joined_centroids[1, ],
+  net_nodes, k = 1,
+  progress = FALSE
+)[[1]]
+to_graph = nngeo::st_nn(
+  points[1, ],
+  net_nodes, k = 1,
+  progress = FALSE
+)[[1]]
 # cppRouting::get_path_pair(graph, from[rep(1, nrow(to))], to)
-route_cpp = cppRouting::get_path_pair(graph, from_graph, to_graph)
+route_cpp = cppRouting::get_path_pair(graph, from_graph[1], to_graph[1])
 str(route_cpp)
 ```

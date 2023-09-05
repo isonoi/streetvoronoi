@@ -87,90 +87,120 @@ We’ll prepare the OSM network for routing.
 
 # Routing with sfnetworks
 
-``` r
-net_linestrings = sf::st_cast(walking_network, "LINESTRING")
-net_groups = stplanr::rnet_group(net_linestrings)
-largest_group = table(net_groups) |> which.max()
-net_clean = net_linestrings[net_groups == largest_group, ]
-net_sfn = sfnetworks::as_sfnetwork(net_clean, directed = FALSE)
-net_igraph = igraph::as.igraph(net_sfn)
-net_sf = net_sfn |> 
-  sfnetworks::activate("edges") |> 
-  dplyr::mutate(from, to, TRAVEL_COST = units::drop_units(sfnetworks::edge_length())) |> 
-  sf::st_as_sf() |> 
-  dplyr::select(from, to, TRAVEL_COST)
-plot(net_sf)
-```
+We’ll start by demonstrating how the package works with the sample
+dataset.
+
+    Simple feature collection with 851 features and 2 fields
+    Geometry type: LINESTRING
+    Dimension:     XY
+    Bounding box:  xmin: 7.522594 ymin: 51.94151 xmax: 7.546705 ymax: 51.9612
+    Geodetic CRS:  WGS 84
+    # A tibble: 851 × 3
+       name                  type                                           geometry
+     * <chr>                 <fct>                                  <LINESTRING [°]>
+     1 Havixbecker Strasse   residential      (7.533722 51.95556, 7.533461 51.95576)
+     2 Pienersallee          secondary   (7.532442 51.95422, 7.53236 51.95377, 7.53…
+     3 Schulte-Bernd-Strasse residential (7.532709 51.95209, 7.532823 51.95239, 7.5…
+     4 <NA>                  path        (7.540063 51.94468, 7.539696 51.94479, 7.5…
+     5 Welsingheide          residential       (7.537673 51.9475, 7.537614 51.94562)
+     6 <NA>                  footway     (7.543791 51.94733, 7.54369 51.94686, 7.54…
+     7 <NA>                  footway           (7.54012 51.94478, 7.539931 51.94514)
+     8 <NA>                  path        (7.53822 51.94546, 7.538131 51.94549, 7.53…
+     9 <NA>                  track       (7.540063 51.94468, 7.540338 51.94468, 7.5…
+    10 <NA>                  track       (7.5424 51.94599, 7.54205 51.94629, 7.5419…
+    # ℹ 841 more rows
 
 ![](README_files/figure-commonmark/unnamed-chunk-8-1.png)
+
+We’ll calculate the route from point 1 to point 2:
+
+![](README_files/figure-commonmark/unnamed-chunk-9-1.png)
+
+We can calculate many routes as follows:
+
+    [1] "tbl_df"     "tbl"        "data.frame"
+
+    Simple feature collection with 9 features and 6 fields
+    Geometry type: LINESTRING
+    Dimension:     XY
+    Bounding box:  xmin: 7.525638 ymin: 51.94607 xmax: 7.53265 ymax: 51.94883
+    Geodetic CRS:  WGS 84
+    # A tibble: 9 × 7
+       from    to name         type                     geometry weight route_number
+      <int> <int> <chr>        <fct>            <LINESTRING [°]>    [m]        <int>
+    1    67    68 <NA>         path    (7.527863 51.94883, 7.52… 282.              1
+    2    68   181 <NA>         path    (7.531646 51.94785, 7.53…  62.4             1
+    3   181   195 <NA>         path    (7.532444 51.94758, 7.53…  15.9             1
+    4   439   440 Pienersallee second… (7.525749 51.94671, 7.52…  12.1             1
+    5    67   194 Pienersallee second… (7.527863 51.94883, 7.52… 102.              1
+    6   440   565 Pienersallee second… (7.525659 51.94662, 7.52…  15.4             1
+    7   565   667 Pienersallee second… (7.52564 51.94648, 7.525…  54.8             1
+    8   194   646 Pienersallee second… (7.527087 51.94805, 7.52… 165.              1
+    9   439   646 Pienersallee second… (7.525816 51.94679, 7.52…   9.45            1
+
+![](README_files/figure-commonmark/unnamed-chunk-11-1.png)
+
+We can calculate the amount of travel on each link as follows:
+
+![](README_files/figure-commonmark/unnamed-chunk-12-1.png)
+
+``` r
+net_linestrings = sf::st_cast(walking_network, "LINESTRING")
+net = sfnetworks::as_sfnetwork(net_linestrings, directed = FALSE)
+library(tidygraph)
+with_graph(net, graph_component_count())
+```
+
+    [1] 623
+
+``` r
+net = net |>
+  activate("edges") |>
+  mutate(weight = edge_length()) |>
+  activate("nodes") |>
+  filter(group_components() == 1)
+with_graph(net, graph_component_count())
+```
+
+    [1] 1
+
+``` r
+net_sf = net |> 
+  sfnetworks::activate("edges") |> 
+  sf::st_as_sf() |> 
+  dplyr::select(from, to, weight)
+nrow(net_sf)
+```
+
+    [1] 763
+
+``` r
+nrow(walking_network)
+```
+
+    [1] 1732
+
+``` r
+tm_shape(walking_network) + tm_lines("grey", lwd = 5) +
+  tm_shape(net_sf) + tm_lines("blue", lwd = 2) 
+```
+
+![](README_files/figure-commonmark/unnamed-chunk-13-1.png)
 
 We’ll start by calculating routes from the first `voronoi_hex_boundary`
 cell to the nearest point.
 
-    [[1]]
-     [1] 1548 1549 1550 1551  670 1565 1558 1564 1563 1559 1529 1528 1570 1569   82
-    [16] 1637 1638  236  802   67
+![](README_files/figure-commonmark/unnamed-chunk-14-1.png)
 
-![](README_files/figure-commonmark/unnamed-chunk-9-1.png)
+    $tm_layout
+    $tm_layout$legend.outside
+    [1] TRUE
+
+    $tm_layout$style
+    [1] NA
+
+
+    attr(,"class")
+    [1] "tm"
 
 # Routing with cppRouting
-
-``` r
-net_df = net_sf |> 
-  sf::st_drop_geometry()
-graph = cppRouting::makegraph(net_df)
-
-#| label: single-path
-head(graph$data)
-```
-
-      from  to      dist
-    1    0  76  63.02741
-    2    1 364 383.60190
-    3    2  85  14.04821
-    4    3 710  18.22150
-    5    4  34  27.57053
-    6    5 712  67.35609
-
-``` r
-head(graph$dict)
-```
-
-      ref id
-    1   1  0
-    2   3  1
-    3   5  2
-    4   7  3
-    5   9  4
-    6  11  5
-
-``` r
-str(graph)
-```
-
-    List of 5
-     $ data  :'data.frame': 1695 obs. of  3 variables:
-      ..$ from: int [1:1695] 0 1 2 3 4 5 6 7 8 9 ...
-      ..$ to  : int [1:1695] 76 364 85 710 34 712 1206 925 253 1265 ...
-      ..$ dist: num [1:1695] 63 383.6 14 18.2 27.6 ...
-     $ coords: NULL
-     $ nbnode: int 2190
-     $ dict  :'data.frame': 2190 obs. of  2 variables:
-      ..$ ref: chr [1:2190] "1" "3" "5" "7" ...
-      ..$ id : int [1:2190] 0 1 2 3 4 5 6 7 8 9 ...
-     $ attrib:List of 4
-      ..$ aux  : NULL
-      ..$ cap  : NULL
-      ..$ alpha: NULL
-      ..$ beta : NULL
-
-``` r
-# calculate routes with cppRouting
-
-# cppRouting::get_path_pair(graph, from[rep(1, nrow(to))], to)
-route_cpp = cppRouting::get_path_pair(graph, from_graph, to_graph)
-str(route_cpp)
-```
-
-    List of 1
-     $ 1244_113: chr(0) 
