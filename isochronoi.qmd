@@ -1,0 +1,106 @@
+---
+format: gfm
+title: "Voronoiesque polygons based on travel times isochrones"
+warning: false
+echo: false
+---
+
+# Prerequisites
+```{r}
+library("tidyverse")
+library("sf")
+library("osrm")
+extract <- TRUE
+contract <- TRUE
+osrm_folder <- "~/osrm/osrm-backend"
+osm_pbf_file <- "oldenburg.osm.pbf"
+```
+
+
+```{r}
+centroid = osmextract:::oe_search("Oldenburg, Germany")
+poly = zonebuilder::zb_zone(centroid, n_circles = 1)
+
+gridpoly <- st_make_grid(cellsize = 0.0005, x = poly, square = F) %>%
+  st_as_sf()
+
+grid <- gridpoly %>%
+  st_centroid()
+
+tm_shape(walking_network) +
+  tm_lines() +
+  tm_shape(points) +
+  tm_dots(col = "red", size = 2)+
+  tm_shape(grid)+
+  tm_dots(col = "blue", size = 0.1)
+```
+
+
+
+
+# Preprocess OSRM
+
+Download map file for Lower Saxony (Niedersachsen) and crop/extract Oldenburg
+region approximately.
+
+```{r}
+#system("osmium extract --bbox 8,53,8.25,53.25 ./data/niedersachsen-latest.osm.pbf -o ./data/oldenburg.osm.pbf")
+```
+
+Extract/contract using bicycle profile so far, switching to car profile creates
+islands/weird allocations of areas, presumably due to very similar travel #
+durations to the different grid points
+
+```{r echo=FALSE,results=FALSE,message=FALSE}
+if (extract) {
+  system(paste("osrm-extract", file.path(".", "data", basename(osm_pbf_file)),
+               "-p", paste0(osrm_folder, "/profiles/bicycle.lua")))
+}
+
+
+osrm_file <- file.path(".", "data", str_replace(basename(osm_pbf_file),
+                                                ".osm.pbf$", ".osrm"))
+if (contract) {
+  system(paste("osrm-contract", osrm_file))
+}
+
+
+system(paste("osrm-routed", osrm_file, "--max-matching-radius=-1"), wait = F)
+```
+
+# Assign Cell Ownership
+Make requests to the server from all of the POIs/points to all grid points.
+Creates a vector of durations for each POI.
+For each gridcell point, find the ID of the POI that minimizes travel duration.
+Gridcell is then "owned" by that POI.
+
+```{r, echo=FALSE,results='hide'}
+dura <- lapply(1:nrow(points), function(p) {
+  dd <- osrm::osrmTable(src = points[p,], dst = grid, osrm.server = "http://0.0.0.0:5000/",measure = c("duration", "distance"))
+  dd$durations
+})
+
+mat <- do.call(rbind, dura) %>%
+  t() %>%
+  as_tibble()
+
+mat$wm <- names(mat)[apply(mat, MARGIN = 1, FUN = which.min)]
+owner <- match(mat$wm, names(mat))
+gridpoly$owner <- owner
+```
+
+Visualize in Plot
+
+```{r}
+ggplot()+
+  geom_sf(data = gridpoly, aes(fill = owner))+
+  geom_sf(data = points, color = "#BB0000")+
+  scale_fill_viridis_c()
+```
+
+
+# Problems / Issues
+- Still relies on OSRM, using cppRouting or sfnetworks would be more lightweight
+- Calculating all distances to the grid is inefficient, especially for larger data sets
+- Islands / weird ownerships prevalent
+- Test for sensitivity to grid cell size.
