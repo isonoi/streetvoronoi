@@ -73,9 +73,10 @@ hex cells that touch the boundary between two or more territories.
 
 ``` r
 inner_lines = rmapshaper::ms_innerlines(voronoi_hex)
-voronoi_hex_boundary = hex_joined[inner_lines, ]
+hex_boundary = hex_joined[inner_lines, ]
+hex_boundary_centroids = st_centroid(hex_boundary)
 tm_shape(voronoi_hex, bb = st_bbox(voronoi)) + tm_polygons(col = "name") +
-  tm_shape(voronoi_hex_boundary) + tm_fill(col = "grey", alpha = 0.8) +
+  tm_shape(hex_boundary) + tm_fill(col = "grey", alpha = 0.8) +
   tm_shape(points) + tm_dots(col = "red", size = 0.8) +
   tm_shape(voronoi) + tm_borders(col = "blue", lwd = 5) +
   tm_layout(legend.outside = TRUE)
@@ -187,8 +188,8 @@ tm_shape(walking_network) + tm_lines("grey", lwd = 5) +
 
 ![](README_files/figure-commonmark/unnamed-chunk-13-1.png)
 
-We’ll start by calculating routes from the first `voronoi_hex_boundary`
-cell to the nearest point.
+We’ll start by calculating routes from the first `hex_boundary` cell to
+the nearest point.
 
 ![](README_files/figure-commonmark/unnamed-chunk-14-1.png)
 
@@ -203,4 +204,38 @@ cell to the nearest point.
     attr(,"class")
     [1] "tm"
 
+## Calculation of shortest paths in boundary cell
+
+A logical next step is to calculate the shortest path to n nearest (in
+Euclidean distance) destinations for ‘boundary cells’. We do this for
+the first boundary cell as follows:
+
+![](README_files/figure-commonmark/unnamed-chunk-15-1.png)
+
+Next we’ll calculate the paths, keeping the total length of each path:
+
+    1182.469 [m]
+
+    [1] "Gaststätte zum Pferdemarkt"
+
+    [1] "Big Ben Pub"
+
+As shown, the pub associated with the shortest path is different from
+the pub associated with the original cell. We will update the cell value
+to reflect this:
+
+    [1] "Gaststätte zum Pferdemarkt"
+
+![](README_files/figure-commonmark/unnamed-chunk-17-1.png)
+
+We’ll now repeat this process for all boundary cells:
+
+![](README_files/figure-commonmark/unnamed-chunk-18-1.png)
+
 # Routing with cppRouting
+
+# Next steps
+
+- Debug the results of the `sfnetworks` approach
+- Get the `cppRouting` approach working
+- Improve networks used for routing with network cleaning approaches

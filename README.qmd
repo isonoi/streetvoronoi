@@ -135,9 +135,10 @@ To minimise the number of requests, the strategy will be as follows: we will ide
 
 ```{r, echo=TRUE}
 inner_lines = rmapshaper::ms_innerlines(voronoi_hex)
-voronoi_hex_boundary = hex_joined[inner_lines, ]
+hex_boundary = hex_joined[inner_lines, ]
+hex_boundary_centroids = st_centroid(hex_boundary)
 tm_shape(voronoi_hex, bb = st_bbox(voronoi)) + tm_polygons(col = "name") +
-  tm_shape(voronoi_hex_boundary) + tm_fill(col = "grey", alpha = 0.8) +
+  tm_shape(hex_boundary) + tm_fill(col = "grey", alpha = 0.8) +
   tm_shape(points) + tm_dots(col = "red", size = 0.8) +
   tm_shape(voronoi) + tm_borders(col = "blue", lwd = 5) +
   tm_layout(legend.outside = TRUE)
@@ -270,7 +271,7 @@ tm_shape(walking_network) + tm_lines("grey", lwd = 5) +
   tm_shape(net_sf) + tm_lines("blue", lwd = 2) 
 ```
 
-We'll start by calculating routes from the first `voronoi_hex_boundary` cell to the nearest point.
+We'll start by calculating routes from the first `hex_boundary` cell to the nearest point.
 
 ```{r}
 net_nodes = net |> 
@@ -286,11 +287,123 @@ path_sf = net |>
 
 tm_shape(voronoi_hex, bb = st_bbox(voronoi)) + tm_polygons(col = "name") +
   tm_shape(hex_joined[1, ]) + tm_fill(col = "black") +
-  tm_shape(voronoi_hex_boundary) + tm_fill(col = "grey", alpha = 0.8) +
+  tm_shape(hex_boundary) + tm_fill(col = "grey", alpha = 0.8) +
   tm_shape(points) + tm_dots(col = "red", size = 0.8) +
   tm_shape(voronoi) + tm_borders(col = "blue", lwd = 5) +
   tm_shape(path_sf) + tm_lines()
   tm_layout(legend.outside = TRUE)
+```
+
+## Calculation of shortest paths in boundary cell
+
+A logical next step is to calculate the shortest path to n nearest (in Euclidean distance) destinations for 'boundary cells'.
+We do this for the first boundary cell as follows:
+
+```{r}
+n = 3
+first_boundary_point = hex_boundary_centroids[1, ]
+nearest_point_ids = nngeo::st_nn(
+  first_boundary_point,
+  points, k = n,
+  progress = FALSE
+)[[1]]
+nearest_points = points[nearest_point_ids, ]
+# plot the result
+tm_shape(voronoi_hex, bb = st_bbox(voronoi)) + tm_polygons(col = "name") +
+  tm_shape(hex_boundary[1, ]) + tm_fill(col = "black") +
+  tm_shape(hex_boundary) + tm_fill(col = "grey", alpha = 0.8) +
+  tm_shape(points) + tm_dots(col = "red", size = 0.8) +
+  tm_shape(voronoi) + tm_borders(col = "blue", lwd = 5) +
+  tm_shape(nearest_points) + tm_dots(col = "green", size = 0.8) +
+  tm_layout(legend.outside = TRUE)
+```
+
+Next we'll calculate the paths, keeping the total length of each path:
+
+```{r}
+paths = st_network_paths(
+  net,
+  from = first_boundary_point,
+  to = nearest_points,
+  weights = "weight"
+)
+path_1 = net |> 
+  activate("edges") |> 
+  slice(paths$edge_paths[[1]]) |>
+  mutate(route_number = 1) |>
+  sf::st_as_sf()
+sum(path_1$weight)
+
+path_weights = sapply(seq(nrow(paths)), function(i) {
+  net |> 
+    activate("edges") |> 
+    slice(paths$edge_paths[[i]]) |>
+    mutate(route_number = i) |>
+    sf::st_as_sf() |>
+    summarise(length = sum(weight)) |>
+    pull(length)
+})
+point_shortest_id = which.min(path_weights)
+point_shortest = nearest_points[point_shortest_id, ]
+cell_value_original = first_boundary_point$name
+cell_value_new = point_shortest$name
+cell_value_original
+cell_value_new
+```
+
+As shown, the pub associated with the shortest path is different from the pub associated with the original cell.
+We will update the cell value to reflect this:
+
+```{r}
+which_hex = which(lengths(st_intersects(hex_joined, first_boundary_point)) > 0)
+hex_iso = hex_joined
+hex_iso$name[which_hex] 
+hex_iso$name[which_hex] = cell_value_new
+m1 = tm_shape(hex_joined) + tm_polygons(col = "name")
+m2 = tm_shape(hex_iso) + tm_polygons(col = "name")
+tmap_arrange(m1, m2)
+```
+
+We'll now repeat this process for all boundary cells:
+
+```{r}
+i = 2
+for(i in seq(nrow(hex_boundary))) {
+  first_boundary_point = hex_boundary_centroids[i, ]
+  nearest_point_ids = nngeo::st_nn(
+    first_boundary_point,
+    points, k = n,
+    progress = FALSE
+  )[[1]]
+  nearest_points = points[nearest_point_ids, ]
+  paths = st_network_paths(
+    net,
+    from = first_boundary_point,
+    to = nearest_points,
+    weights = "weight"
+  )
+  path_weights = sapply(seq(nrow(paths)), function(i) {
+    net |> 
+      activate("edges") |> 
+      slice(paths$edge_paths[[i]]) |>
+      mutate(route_number = i) |>
+      sf::st_as_sf() |>
+      summarise(length = sum(weight)) |>
+      pull(length)
+  })
+  point_shortest_id = which.min(path_weights)
+  point_shortest = nearest_points[point_shortest_id, ]
+  cell_value_original = first_boundary_point$name
+  cell_value_new = point_shortest$name
+  which_hex = which(lengths(st_intersects(hex_joined, first_boundary_point)) > 0)
+  hex_iso$name[which_hex] = cell_value_new
+}
+# Plot the results next to the original:
+tm_points = tm_shape(points) + tm_dots(col = "red", size = 0.8)
+tm_net = tm_shape(net_sf) + tm_lines(col = "black")
+m1_net = m1 + tm_net + tm_points
+m2_net = tm_shape(hex_iso) + tm_polygons(col = "name") + tm_net + tm_points
+tmap_arrange(m1_net, m2_net)
 ```
 
 # Routing with cppRouting
@@ -299,7 +412,10 @@ tm_shape(voronoi_hex, bb = st_bbox(voronoi)) + tm_polygons(col = "name") +
 #| eval: false
 net_df = net_sf |> 
   sf::st_drop_geometry()
-graph = cppRouting::makegraph(net_df)
+head(net_df)
+net_from = lwgeom::st_startpoint(net_sf)
+net_to = lwgeom::st_endpoint(net_sf)
+graph = cppRouting::makegraph(net_df, directed = FALSE)
 names(graph)
 names(graph$data)
 summary(graph$data$dist)
@@ -311,15 +427,35 @@ str(graph)
 # calculate route from A to B with cppRouting
 from_graph = nngeo::st_nn(
   hex_joined_centroids[1, ],
-  net_nodes, k = 1,
+  net_from, k = 1,
   progress = FALSE
 )[[1]]
 to_graph = nngeo::st_nn(
   points[1, ],
-  net_nodes, k = 1,
+  net_to, k = 1,
   progress = FALSE
 )[[1]]
 # cppRouting::get_path_pair(graph, from[rep(1, nrow(to))], to)
-route_cpp = cppRouting::get_path_pair(graph, from_graph[1], to_graph[1])
-str(route_cpp)
+route_cpp = cppRouting::get_path_pair(graph, 1, 2, long = TRUE)
+cppRouting::get_path_pair(graph, from_graph[1], to_graph[1])
+route_cpp_df = cppRouting::get_path_pair(graph, from_graph[1], to_graph[1], long = TRUE)
+str(route_cpp_df)
+route_cpp_df_to_join = route_cpp_df |> 
+  transmute(from = as.numeric(node))
+# route_cpp1 = net_sf[as.numeric(route_cpp[[1]]), ]
+route_cpp = inner_join(route_cpp_df_to_join, net_sf) |>
+  st_as_sf()
+tm_shape(voronoi_hex, bb = st_bbox(voronoi)) + tm_polygons(col = "name") +
+  tm_shape(hex_joined[1, ]) + tm_fill(col = "black") +
+  tm_shape(hex_boundary) + tm_fill(col = "grey", alpha = 0.8) +
+  tm_shape(points) + tm_dots(col = "red", size = 0.8) +
+  tm_shape(voronoi) + tm_borders(col = "blue", lwd = 5) +
+  tm_shape(route_cpp) + tm_lines() +
+  tm_layout(legend.outside = TRUE)
 ```
+
+# Next steps
+
+- Debug the results of the `sfnetworks` approach
+- Get the `cppRouting` approach working
+- Improve networks used for routing with network cleaning approaches
