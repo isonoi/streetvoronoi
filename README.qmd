@@ -458,4 +458,5 @@ tm_shape(voronoi_hex, bb = st_bbox(voronoi)) + tm_polygons(col = "name") +
 
 - Debug the results of the `sfnetworks` approach
 - Get the `cppRouting` approach working
+- Test out different routing backends, to overcome issues with local routing
 - Improve networks used for routing with network cleaning approaches
