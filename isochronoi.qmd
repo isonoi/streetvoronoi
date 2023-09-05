@@ -92,8 +92,12 @@ gridpoly$owner <- owner
 Visualize in Plot
 
 ```{r}
+
+walking_network = sf::read_sf("oldenburg_walking_network.geojson")
+
 ggplot()+
   geom_sf(data = gridpoly, aes(fill = owner))+
+  geom_sf(data = walking_network, alpha = 0.3)+
   geom_sf(data = points, color = "#BB0000")+
   scale_fill_viridis_c()
 ```
